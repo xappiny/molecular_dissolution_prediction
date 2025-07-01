@@ -20,7 +20,6 @@ from sklearn.preprocessing import StandardScaler
 
 warnings.filterwarnings('ignore')
 
-# [eval_metrics, train_and_save_model, model_opt 函数保持不变]
 def eval_metrics(actual, pred):
     rmse = np.sqrt(mean_squared_error(actual, pred))
     mae = mean_absolute_error(actual, pred)
@@ -94,11 +93,10 @@ def model_opt(model_class, hyper_space, groups, X_train, y_train, max_evals=100)
     return best, trials, inner_loop_performance
 
 if __name__ == "__main__":
-    # 数据读取和预处理
-    base_path = Path(r"C:\Users\熊萍\Desktop\固体分散体\溶出_ZJY\dissolution\external_val\final")
+    base_path = Path(r"\external_val\final")
     df = pd.read_csv(base_path / "scaler_features_model_train.csv", encoding='unicode_escape')
     missing_cols = df.columns[df.isna().any()].tolist()
-    print("包含缺失值的列:", missing_cols)
+    print("missing_cols:", missing_cols)
 
     X = df.iloc[:, 1:-1]
     y = df['Output_diss_fraction']
@@ -108,7 +106,6 @@ if __name__ == "__main__":
     #X1 = scaler.fit_transform(X)
     #joblib.dump(scaler, base_path / "scaler.pkl")
 
-    # 定义模型和超参数空间
     models = {
         'lgb': (lgb.LGBMRegressor, {
             'learning_rate': hp.uniform('learning_rate', 0.001, 0.2),
@@ -145,7 +142,6 @@ if __name__ == "__main__":
         })
     }
 
-    # 用于存储每种模型的最优信息
     best_models_info = {
         model_name: {
             'model': None,
@@ -176,14 +172,12 @@ if __name__ == "__main__":
         lgb_model = lgb.LGBMRegressor(verbose=-1)
         lgb_model.fit(X, y)
 
-    # 用于存储性能指标
     outer_cv = GroupKFold(n_splits=5)
     all_test_preds = {model_name: [] for model_name in models.keys()}
     all_test_y = {model_name: [] for model_name in models.keys()}
     outer_loop_performance = {model_name: {'rmse': [], 'mae': [], 'r2': []} for model_name in models.keys()}
     inner_loop_performance_all = {model_name: {'rmse': [], 'mae': [], 'r2': []} for model_name in models.keys()}
 
-    # 嵌套交叉验证
     for fold_idx, (train_idx, test_idx) in enumerate(outer_cv.split(X, y, groups=groups)):
         print(f"\nOuter Fold {fold_idx + 1}")
         X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
@@ -216,23 +210,19 @@ if __name__ == "__main__":
                     params['n_estimators'] = params['n_estimators'] + 5
             model = model_class(**params)
             model.fit(X_train, y_train)
-            # 记录内层性能
             inner_loop_performance_all[model_name]['rmse'].extend(inner_loop_performance['rmse'])
             inner_loop_performance_all[model_name]['mae'].extend(inner_loop_performance['mae'])
             inner_loop_performance_all[model_name]['r2'].extend(inner_loop_performance['r2'])
 
-            # 测试集预测
             ypreds_test = model.predict(X_test)
             all_test_preds[model_name].extend(ypreds_test)
             all_test_y[model_name].extend(y_test)
 
-            # 计算外层性能
             rmse_test, mae_test, r2_test, _ = eval_metrics(y_test, ypreds_test)
             outer_loop_performance[model_name]['rmse'].append(rmse_test)
             outer_loop_performance[model_name]['mae'].append(mae_test)
             outer_loop_performance[model_name]['r2'].append(r2_test)
 
-            # 更新最优模型
             if rmse_test < best_models_info[model_name]['rmse']:
                 best_models_info[model_name]['model'] = model
                 best_models_info[model_name]['rmse'] = rmse_test
@@ -241,7 +231,6 @@ if __name__ == "__main__":
                 best_models_info[model_name]['fold_idx'] = fold_idx + 1
                 best_models_info[model_name]['params'] = best_params
 
-        # 保存每种模型的全局最优版本
     print("\n=== Global Best Models ===")
     for model_name, info in best_models_info.items():
         if info['model'] is not None:
@@ -251,27 +240,22 @@ if __name__ == "__main__":
             print(f"Best performance (Fold {info['fold_idx']}): RMSE = {info['rmse']:.3f}, MAE = {info['mae']:.3f}, R² = {info['r2']:.3f}")
             print(f"Best hyperparameters: {info['params']}")
 
-    # 打印内层和外层性能统计
     print("\n=== Performance Statistics ===")
     for model_name in models.keys():
         print(f"\nResults for {model_name.upper()}:")
 
-        # 内层性能（基于所有25次内层折叠）
         print("Inner Loop Performance (across all 25 inner folds):")
         for metric in ['rmse', 'mae', 'r2']:
             mean_val = np.mean(inner_loop_performance_all[model_name][metric])
             std_val = np.std(inner_loop_performance_all[model_name][metric])
             print(f"  {metric.upper()}: {mean_val:.3f}±{std_val:.3f}")
 
-        # 外层性能（基于5次外层折叠）
         print("Outer Loop Performance (across 5 outer folds):")
         for metric in ['rmse', 'mae', 'r2']:
             mean_val = np.mean(outer_loop_performance[model_name][metric])
             std_val = np.std(outer_loop_performance[model_name][metric])
             print(f"  {metric.upper()}: {mean_val:.3f}±{std_val:.3f}")
 
-    # 绘图（保持不变）
-        # 为每个模型绘制散点图
     for model_name in models.keys():
         fig = plt.figure(figsize=(8, 8))
         gs = fig.add_gridspec(4, 4)
